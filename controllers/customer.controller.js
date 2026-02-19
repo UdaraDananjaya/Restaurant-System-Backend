@@ -1,80 +1,376 @@
-const db = require("../models/data.store");
+const { Restaurant, MenuItem, Order, User, Customer } = require("../models");
 const recommendationService = require("../services/recommendation.service");
+const customerService = require("../services/customer.service");
 
 /**
  * Get all restaurants
  */
-exports.getRestaurants = (req, res) => {
-  res.json(db.restaurants);
-};
+exports.getRestaurants = async (req, res) => {
+  try {
+    const restaurants = await Restaurant.findAll({
+      where: { status: 'ACTIVE' },
+      include: [{
+        model: User,
+        as: 'seller',
+        attributes: ['id', 'name', 'email']
+      }],
+      order: [['created_at', 'DESC']]
+    });
 
-/**
- * Get restaurant menu (FROM menuItems)
- */
-exports.getRestaurantMenu = (req, res) => {
-  const restaurantId = Number(req.params.id);
-
-  const menu = db.menuItems.filter(
-    (m) => m.restaurantId === restaurantId && m.isAvailable,
-  );
-
-  res.json(menu);
-};
-
-/**
- * Place order (FIXED ITEM STRUCTURE)
- */
-exports.placeOrder = (req, res) => {
-  const { restaurantId, items } = req.body;
-
-  const restaurant = db.restaurants.find((r) => r.id === Number(restaurantId));
-  if (!restaurant) {
-    return res.status(404).json({ message: "Restaurant not found" });
+    res.json(restaurants);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch restaurants" });
   }
+};
 
-  const enrichedItems = items.map((item) => {
-    const menuItem = db.menuItems.find((m) => m.id === Number(item.menuItemId));
+/**
+ * Get restaurant menu
+ */
+exports.getRestaurantMenu = async (req, res) => {
+  try {
+    const restaurantId = req.params.id;
 
-    if (!menuItem) {
-      throw new Error("Menu item not found");
+    const menu = await MenuItem.findAll({
+      where: {
+        restaurant_id: restaurantId,
+        is_available: true
+      },
+      order: [['name', 'ASC']]
+    });
+
+    res.json(menu);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch menu" });
+  }
+};
+
+/**
+ * Place order
+ */
+exports.placeOrder = async (req, res) => {
+  try {
+    const { restaurantId, items } = req.body;
+
+    // Validate restaurant exists
+    const restaurant = await Restaurant.findByPk(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    menuItem.ordersCount += item.qty;
+    // Validate and enrich items
+    const enrichedItems = [];
+    let totalAmount = 0;
 
-    return {
-      name: menuItem.name, // 🔥 FIXED
-      portion: item.portion,
-      qty: item.qty,
-    };
-  });
+    for (const item of items) {
+      const menuItem = await MenuItem.findOne({
+        where: {
+          id: item.menuItemId,
+          restaurant_id: restaurantId,
+          is_available: true
+        }
+      });
 
-  const order = {
-    id: db.orders.length + 1,
-    customerId: req.user.id,
-    sellerId: restaurant.sellerId,
-    restaurantId: restaurant.id,
-    items: enrichedItems,
-    status: "PENDING",
-    createdAt: new Date(),
-    total: 0,
-  };
+      if (!menuItem) {
+        return res.status(400).json({
+          message: `Menu item ${item.menuItemId} not found or unavailable`
+        });
+      }
 
-  db.orders.push(order);
+      // Check stock
+      if (menuItem.stock < item.qty) {
+        return res.status(400).json({
+          message: `Insufficient stock for ${menuItem.name}`
+        });
+      }
 
-  res.json({ message: "Order placed successfully", order });
+      // Calculate total
+      const itemTotal = menuItem.price * item.qty;
+      totalAmount += itemTotal;
+
+      enrichedItems.push({
+        menuItemId: menuItem.id,
+        name: menuItem.name,
+        price: menuItem.price,
+        qty: item.qty,
+        portion: item.portion || 'regular'
+      });
+
+      // Update stock and orders count
+      await menuItem.update({
+        stock: menuItem.stock - item.qty,
+        orders_count: menuItem.orders_count + item.qty
+      });
+    }
+
+    // Create order
+    const order = await Order.create({
+      user_id: req.user.id,
+      restaurant_id: restaurantId,
+      items: enrichedItems,
+      total_amount: totalAmount,
+      status: 'PENDING'
+    });
+
+    // Fetch order with relations for response
+    const orderWithDetails = await Order.findByPk(order.id, {
+      include: [
+        {
+          model: Restaurant,
+          as: 'restaurant',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    res.status(201).json({
+      message: "Order placed successfully",
+      order: orderWithDetails
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to place order" });
+  }
 };
 
 /**
- * Customer orders
+ * Get customer orders
  */
-exports.getOrders = (req, res) => {
-  res.json(db.orders.filter((o) => o.customerId === req.user.id));
+exports.getOrders = async (req, res) => {
+  try {
+    const orders = await Order.findAll({
+      where: { user_id: req.user.id },
+      include: [
+        {
+          model: Restaurant,
+          as: 'restaurant',
+          attributes: ['id', 'name', 'image']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json(orders);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch orders" });
+  }
 };
 
 /**
- * Recommendations
+ * Get personalized restaurant recommendations
  */
-exports.getRecommendations = (req, res) => {
-  const recommendations = recommendationService(req.user, db.restaurants);
-  res.json(recommendations);
+exports.getRecommendations = async (req, res) => {
+  try {
+    const limit = req.query.limit || 5;
+
+    // Use recommendation service with advanced scoring
+    const recommendations = await recommendationService(req.user.id, limit);
+
+    res.json({ recommended: recommendations });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch recommendations" });
+  }
 };
+
+/**
+ * Update customer profile with preferences
+ */
+exports.updateCustomerProfile = async (req, res) => {
+  try {
+    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+
+    let customer = await Customer.findOne({
+      where: { user_id: req.user.id }
+    });
+
+    if (!customer) {
+      customer = await Customer.create({
+        user_id: req.user.id,
+        age,
+        gender,
+        dietary_preferences: dietary_preferences || [],
+        favorite_cuisine,
+        order_history: order_history || []
+      });
+    } else {
+      await customer.update({
+        age: age !== undefined ? age : customer.age,
+        gender: gender !== undefined ? gender : customer.gender,
+        dietary_preferences: dietary_preferences !== undefined ? dietary_preferences : customer.dietary_preferences,
+        favorite_cuisine: favorite_cuisine !== undefined ? favorite_cuisine : customer.favorite_cuisine,
+        order_history: order_history !== undefined ? order_history : customer.order_history
+      });
+    }
+
+    res.json({
+      message: "Customer profile updated successfully",
+      profile: customer
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update customer profile" });
+  }
+};
+
+/**
+ * Get customer profile
+ */
+/**
+ * Get customer profile
+ */
+exports.getCustomerProfile = async (req, res) => {
+  try {
+    const customer = await customerService.getCustomerProfile(req.user.id);
+
+    if (!customer) {
+      return res.status(404).json({ message: "Customer profile not found" });
+    }
+
+    res.json(customer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch customer profile" });
+  }
+};
+
+/**
+ * Create customer profile (used during registration)
+ */
+exports.createCustomerProfile = async (req, res) => {
+  try {
+    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+
+    // Check if customer profile already exists
+    const existingCustomer = await Customer.findOne({
+      where: { user_id: req.user.id }
+    });
+
+    if (existingCustomer) {
+      return res.status(409).json({ message: "Customer profile already exists" });
+    }
+
+    const customer = await customerService.createCustomer(req.user.id, {
+      age,
+      gender,
+      dietary_preferences,
+      favorite_cuisine,
+      order_history
+    });
+
+    res.status(201).json({
+      message: "Customer profile created successfully",
+      profile: customer
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to create customer profile" });
+  }
+};
+
+/**
+ * Update customer profile
+ */
+exports.updateCustomerProfileData = async (req, res) => {
+  try {
+    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+
+    const customer = await customerService.updateCustomer(req.user.id, {
+      age,
+      gender,
+      dietary_preferences,
+      favorite_cuisine,
+      order_history
+    });
+
+    res.json({
+      message: "Customer profile updated successfully",
+      profile: customer
+    });
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'Customer profile not found') {
+      return res.status(404).json({ message: err.message });
+    }
+    res.status(500).json({ message: "Failed to update customer profile" });
+  }
+};
+
+/**
+ * Delete customer profile
+ */
+exports.deleteCustomerProfile = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+
+    // Check authorization - customer can only delete their own, admin can delete any
+    if (req.user.role !== 'ADMIN' && req.user.id !== customerId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    await customerService.deleteCustomer(customerId);
+
+    res.json({ message: "Customer profile deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'Customer profile not found') {
+      return res.status(404).json({ message: err.message });
+    }
+    res.status(500).json({ message: "Failed to delete customer profile" });
+  }
+};
+
+/**
+ * Suspend customer (admin only)
+ */
+exports.suspendCustomer = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+
+    await customerService.suspendCustomer(customerId);
+
+    res.json({ message: "Customer suspended successfully" });
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'Customer profile not found') {
+      return res.status(404).json({ message: err.message });
+    }
+    res.status(500).json({ message: "Failed to suspend customer" });
+  }
+};
+
+/**
+ * Reactivate customer (admin only)
+ */
+exports.reactivateCustomer = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+
+    await customerService.reactivateCustomer(customerId);
+
+    res.json({ message: "Customer reactivated successfully" });
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'Customer profile not found') {
+      return res.status(404).json({ message: err.message });
+    }
+    res.status(500).json({ message: "Failed to reactivate customer" });
+  }
+};
+
+/**
+ * Get all customers (admin only)
+ */
+exports.getAllCustomers = async (req, res) => {
+  try {
+    const customers = await customerService.getAllCustomers();
+
+    res.json(customers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch customers" });
+  }
+};
+

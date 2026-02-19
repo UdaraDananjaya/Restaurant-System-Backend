@@ -4,6 +4,7 @@ const Restaurant = require('./Restaurant');
 const MenuItem = require('./MenuItem');
 const Order = require('./Order');
 const AdminLog = require('./AdminLog');
+const Customer = require('./Customer');
 
 // Define Associations
 
@@ -15,6 +16,16 @@ User.hasMany(Restaurant, {
 Restaurant.belongsTo(User, {
   foreignKey: 'seller_id',
   as: 'seller'
+});
+
+// User - Customer (One to One)
+User.hasOne(Customer, {
+  foreignKey: 'user_id',
+  as: 'customerProfile'
+});
+Customer.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user'
 });
 
 // Restaurant - MenuItem (One to Many)
@@ -63,6 +74,7 @@ module.exports = {
   Restaurant,
   MenuItem,
   Order,
-  AdminLog
+  AdminLog,
+  Customer
 };
 

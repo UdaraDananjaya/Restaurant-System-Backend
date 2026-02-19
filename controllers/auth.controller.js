@@ -1,4 +1,4 @@
-const pool = require("../config/db");
+const { User } = require("../models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -11,17 +11,15 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     /* 🔎 1. Check user exists */
-    const [rows] = await pool.execute("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
+    const user = await User.findOne({
+      where: { email }
+    });
 
-    if (rows.length === 0) {
+    if (!user) {
       return res.status(401).json({
         message: "Invalid email or password",
       });
     }
-
-    const user = rows[0];
 
     /* 🔐 2. Check password first */
     const isMatch = await bcrypt.compare(password, user.password);
@@ -92,12 +90,11 @@ exports.register = async (req, res) => {
     }
 
     /* 🔎 2. Check if email already exists */
-    const [existing] = await pool.execute(
-      "SELECT id FROM users WHERE email = ?",
-      [email],
-    );
+    const existing = await User.findOne({
+      where: { email }
+    });
 
-    if (existing.length > 0) {
+    if (existing) {
       return res.status(409).json({
         message: "Email already registered",
       });
@@ -110,11 +107,13 @@ exports.register = async (req, res) => {
     const status = role === "SELLER" ? "PENDING" : "APPROVED";
 
     /* 💾 5. Insert user */
-    await pool.execute(
-      `INSERT INTO users (name, email, password, role, status)
-       VALUES (?, ?, ?, ?, ?)`,
-      [name, email, hashedPassword, role, status],
-    );
+    await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      status
+    });
 
     /* 🎯 6. Send response */
     res.status(201).json({
@@ -128,3 +127,4 @@ exports.register = async (req, res) => {
     res.status(500).json({ message: "Registration failed" });
   }
 };
+

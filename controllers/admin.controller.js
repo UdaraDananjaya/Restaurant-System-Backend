@@ -1,4 +1,4 @@
-const pool = require("../config/db");
+const { User, Restaurant, Order, AdminLog, sequelize } = require("../models");
 const logAdminAction = require("../utils/adminLogger");
 const { Parser } = require("json2csv");
 
@@ -6,10 +6,11 @@ const { Parser } = require("json2csv");
 
 exports.getUsers = async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      "SELECT id, name, email, role, status, created_at FROM users",
-    );
-    res.json(rows);
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'status', 'created_at'],
+      order: [['created_at', 'DESC']]
+    });
+    res.json(users);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch users" });
@@ -22,12 +23,17 @@ exports.approveSeller = async (req, res) => {
   try {
     const sellerId = req.params.id;
 
-    const [result] = await pool.execute(
-      "UPDATE users SET status='APPROVED' WHERE id=? AND role='SELLER'",
-      [sellerId],
+    const [updatedCount] = await User.update(
+      { status: 'APPROVED' },
+      {
+        where: {
+          id: sellerId,
+          role: 'SELLER'
+        }
+      }
     );
 
-    if (result.affectedRows === 0)
+    if (updatedCount === 0)
       return res.status(404).json({ message: "Seller not found" });
 
     await logAdminAction(req.user.id, "Approved Seller", sellerId);
@@ -45,12 +51,17 @@ exports.rejectSeller = async (req, res) => {
   try {
     const sellerId = req.params.id;
 
-    const [result] = await pool.execute(
-      "UPDATE users SET status='REJECTED' WHERE id=? AND role='SELLER'",
-      [sellerId],
+    const [updatedCount] = await User.update(
+      { status: 'REJECTED' },
+      {
+        where: {
+          id: sellerId,
+          role: 'SELLER'
+        }
+      }
     );
 
-    if (result.affectedRows === 0)
+    if (updatedCount === 0)
       return res.status(404).json({ message: "Seller not found" });
 
     await logAdminAction(req.user.id, "Rejected Seller", sellerId);
@@ -68,12 +79,12 @@ exports.suspendUser = async (req, res) => {
   try {
     const userId = req.params.id;
 
-    const [result] = await pool.execute(
-      "UPDATE users SET status='SUSPENDED' WHERE id=?",
-      [userId],
+    const [updatedCount] = await User.update(
+      { status: 'SUSPENDED' },
+      { where: { id: userId } }
     );
 
-    if (result.affectedRows === 0)
+    if (updatedCount === 0)
       return res.status(404).json({ message: "User not found" });
 
     await logAdminAction(req.user.id, "Suspended User", userId);
@@ -91,12 +102,12 @@ exports.reactivateUser = async (req, res) => {
   try {
     const userId = req.params.id;
 
-    const [result] = await pool.execute(
-      "UPDATE users SET status='APPROVED' WHERE id=?",
-      [userId],
+    const [updatedCount] = await User.update(
+      { status: 'APPROVED' },
+      { where: { id: userId } }
     );
 
-    if (result.affectedRows === 0)
+    if (updatedCount === 0)
       return res.status(404).json({ message: "User not found" });
 
     await logAdminAction(req.user.id, "Reactivated User", userId);
@@ -112,18 +123,14 @@ exports.reactivateUser = async (req, res) => {
 
 exports.analytics = async (req, res) => {
   try {
-    const [[users]] = await pool.execute("SELECT COUNT(*) AS count FROM users");
-    const [[restaurants]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM restaurants",
-    );
-    const [[orders]] = await pool.execute(
-      "SELECT COUNT(*) AS count FROM orders",
-    );
+    const totalUsers = await User.count();
+    const totalRestaurants = await Restaurant.count();
+    const totalOrders = await Order.count();
 
     res.json({
-      totalUsers: users.count,
-      totalRestaurants: restaurants.count,
-      totalOrders: orders.count,
+      totalUsers,
+      totalRestaurants,
+      totalOrders,
     });
   } catch (err) {
     console.error(err);
@@ -135,23 +142,42 @@ exports.analytics = async (req, res) => {
 
 exports.getAllOrders = async (req, res) => {
   try {
-    const [rows] = await pool.execute(`
-      SELECT 
-        o.id,
-        o.status,
-        o.total_amount,
-        o.created_at,
-        u.email AS customerEmail,
-        r.name AS restaurantName,
-        s.email AS sellerEmail
-      FROM orders o
-      JOIN users u ON o.user_id = u.id
-      JOIN restaurants r ON o.restaurant_id = r.id
-      JOIN users s ON r.seller_id = s.id
-      ORDER BY o.created_at DESC
-    `);
+    const orders = await Order.findAll({
+      attributes: ['id', 'status', 'total_amount', 'created_at'],
+      include: [
+        {
+          model: User,
+          as: 'customer',
+          attributes: ['email']
+        },
+        {
+          model: Restaurant,
+          as: 'restaurant',
+          attributes: ['name'],
+          include: [
+            {
+              model: User,
+              as: 'seller',
+              attributes: ['email']
+            }
+          ]
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
 
-    res.json(rows);
+    // Transform to match the original SQL output format
+    const formattedOrders = orders.map(order => ({
+      id: order.id,
+      status: order.status,
+      total_amount: order.total_amount,
+      created_at: order.created_at,
+      customerEmail: order.customer?.email,
+      restaurantName: order.restaurant?.name,
+      sellerEmail: order.restaurant?.seller?.email
+    }));
+
+    res.json(formattedOrders);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch orders" });
@@ -162,20 +188,33 @@ exports.getAllOrders = async (req, res) => {
 
 exports.getLogs = async (req, res) => {
   try {
-    const [rows] = await pool.execute(`
-      SELECT 
-        l.id,
-        l.action,
-        l.created_at,
-        a.email AS adminEmail,
-        u.email AS targetUserEmail
-      FROM admin_logs l
-      LEFT JOIN users a ON l.admin_id = a.id
-      LEFT JOIN users u ON l.target_user_id = u.id
-      ORDER BY l.created_at DESC
-    `);
+    const logs = await AdminLog.findAll({
+      attributes: ['id', 'action', 'created_at'],
+      include: [
+        {
+          model: User,
+          as: 'admin',
+          attributes: ['email']
+        },
+        {
+          model: User,
+          as: 'targetUser',
+          attributes: ['email']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
 
-    res.json(rows);
+    // Transform to match the original SQL output format
+    const formattedLogs = logs.map(log => ({
+      id: log.id,
+      action: log.action,
+      created_at: log.created_at,
+      adminEmail: log.admin?.email,
+      targetUserEmail: log.targetUser?.email
+    }));
+
+    res.json(formattedLogs);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch logs" });
@@ -187,9 +226,10 @@ exports.getLogs = async (req, res) => {
 /* Export Users CSV */
 exports.exportUsersCSV = async (req, res) => {
   try {
-    const [users] = await pool.execute(
-      "SELECT id, name, email, role, status, created_at FROM users",
-    );
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'status', 'created_at'],
+      raw: true
+    });
 
     const parser = new Parser();
     const csv = parser.parse(users);
@@ -206,23 +246,42 @@ exports.exportUsersCSV = async (req, res) => {
 /* Export Orders CSV */
 exports.exportOrdersCSV = async (req, res) => {
   try {
-    const [orders] = await pool.execute(`
-      SELECT 
-        o.id,
-        o.status,
-        o.total_amount,
-        o.created_at,
-        u.email AS customerEmail,
-        r.name AS restaurantName,
-        s.email AS sellerEmail
-      FROM orders o
-      JOIN users u ON o.user_id = u.id
-      JOIN restaurants r ON o.restaurant_id = r.id
-      JOIN users s ON r.seller_id = s.id
-    `);
+    const orders = await Order.findAll({
+      attributes: ['id', 'status', 'total_amount', 'created_at'],
+      include: [
+        {
+          model: User,
+          as: 'customer',
+          attributes: ['email']
+        },
+        {
+          model: Restaurant,
+          as: 'restaurant',
+          attributes: ['name'],
+          include: [
+            {
+              model: User,
+              as: 'seller',
+              attributes: ['email']
+            }
+          ]
+        }
+      ]
+    });
+
+    // Format for CSV
+    const formattedOrders = orders.map(order => ({
+      id: order.id,
+      status: order.status,
+      total_amount: order.total_amount,
+      created_at: order.created_at,
+      customerEmail: order.customer?.email,
+      restaurantName: order.restaurant?.name,
+      sellerEmail: order.restaurant?.seller?.email
+    }));
 
     const parser = new Parser();
-    const csv = parser.parse(orders);
+    const csv = parser.parse(formattedOrders);
 
     res.header("Content-Type", "text/csv");
     res.attachment("orders.csv");
@@ -236,20 +295,33 @@ exports.exportOrdersCSV = async (req, res) => {
 /* Export Logs CSV */
 exports.exportLogsCSV = async (req, res) => {
   try {
-    const [logs] = await pool.execute(`
-      SELECT 
-        l.id,
-        l.action,
-        l.created_at,
-        a.email AS adminEmail,
-        u.email AS targetUserEmail
-      FROM admin_logs l
-      LEFT JOIN users a ON l.admin_id = a.id
-      LEFT JOIN users u ON l.target_user_id = u.id
-    `);
+    const logs = await AdminLog.findAll({
+      attributes: ['id', 'action', 'created_at'],
+      include: [
+        {
+          model: User,
+          as: 'admin',
+          attributes: ['email']
+        },
+        {
+          model: User,
+          as: 'targetUser',
+          attributes: ['email']
+        }
+      ]
+    });
+
+    // Format for CSV
+    const formattedLogs = logs.map(log => ({
+      id: log.id,
+      action: log.action,
+      created_at: log.created_at,
+      adminEmail: log.admin?.email,
+      targetUserEmail: log.targetUser?.email
+    }));
 
     const parser = new Parser();
-    const csv = parser.parse(logs);
+    const csv = parser.parse(formattedLogs);
 
     res.header("Content-Type", "text/csv");
     res.attachment("admin_logs.csv");
@@ -264,7 +336,7 @@ exports.exportLogsCSV = async (req, res) => {
 
 exports.monthlyRevenue = async (req, res) => {
   try {
-    const [rows] = await pool.execute(`
+    const rows = await sequelize.query(`
       SELECT 
         DATE_FORMAT(created_at, '%Y-%m') AS month,
         SUM(total_amount) AS revenue
@@ -272,7 +344,9 @@ exports.monthlyRevenue = async (req, res) => {
       WHERE status = 'COMPLETED'
       GROUP BY month
       ORDER BY month ASC
-    `);
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
 
     res.json(rows);
   } catch (err) {
@@ -280,3 +354,4 @@ exports.monthlyRevenue = async (req, res) => {
     res.status(500).json({ message: "Revenue trend failed" });
   }
 };
+

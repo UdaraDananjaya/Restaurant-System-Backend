@@ -1,4 +1,4 @@
-const pool = require("../config/db");
+const { User } = require("../models");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
@@ -8,15 +8,14 @@ exports.requestReset = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const [users] = await pool.execute("SELECT id FROM users WHERE email = ?", [
-      email,
-    ]);
+    const user = await User.findOne({
+      where: { email }
+    });
 
-    if (users.length === 0) {
+    if (!user) {
+      // Security: Don't reveal if email exists
       return res.json({ message: "If account exists, reset link sent." });
     }
-
-    const user = users[0];
 
     const rawToken = crypto.randomBytes(32).toString("hex");
     const tokenHash = crypto
@@ -26,10 +25,10 @@ exports.requestReset = async (req, res) => {
 
     const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    await pool.execute(
-      "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)",
-      [user.id, tokenHash, expires],
-    );
+    await user.update({
+      reset_token: tokenHash,
+      reset_token_expiry: expires
+    });
 
     // Normally send email — for now return token (DEV MODE)
     res.json({
@@ -50,27 +49,28 @@ exports.resetPassword = async (req, res) => {
 
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-    const [rows] = await pool.execute(
-      "SELECT * FROM password_resets WHERE token_hash = ? AND expires_at > NOW()",
-      [tokenHash],
-    );
+    const user = await User.findOne({
+      where: {
+        reset_token: tokenHash
+      }
+    });
 
-    if (rows.length === 0) {
+    if (!user) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    const resetEntry = rows[0];
+    // Check if token is expired
+    if (!user.reset_token_expiry || user.reset_token_expiry < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await pool.execute("UPDATE users SET password = ? WHERE id = ?", [
-      hashedPassword,
-      resetEntry.user_id,
-    ]);
-
-    await pool.execute("DELETE FROM password_resets WHERE id = ?", [
-      resetEntry.id,
-    ]);
+    await user.update({
+      password: hashedPassword,
+      reset_token: null,
+      reset_token_expiry: null
+    });
 
     res.json({ message: "Password reset successful" });
   } catch (err) {
@@ -78,3 +78,4 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ message: "Password reset failed" });
   }
 };
+

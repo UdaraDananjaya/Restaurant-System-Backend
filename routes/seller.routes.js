@@ -13,6 +13,22 @@ const sellerController = require("../controllers/seller.controller");
 /* ================= RESTAURANT ==================== */
 /* ================================================= */
 
+/**
+ * @swagger
+ * /api/seller/restaurant:
+ *   get:
+ *     summary: Get seller's restaurant
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Restaurant details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Restaurant'
+ */
 router.get(
   "/restaurant",
   verifyToken,
@@ -24,7 +40,24 @@ router.get(
 /* ================= MENU MANAGEMENT =============== */
 /* ================================================= */
 
-/* Get Menu */
+/**
+ * @swagger
+ * /api/seller/menu:
+ *   get:
+ *     summary: Get restaurant menu items
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of menu items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/MenuItem'
+ */
 router.get(
   "/menu",
   verifyToken,
@@ -32,7 +65,34 @@ router.get(
   sellerController.getMenu,
 );
 
-/* Add Menu Item */
+/**
+ * @swagger
+ * /api/seller/menu:
+ *   post:
+ *     summary: Add new menu item
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               stock:
+ *                 type: integer
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Menu item created
+ */
 router.post(
   "/menu",
   verifyToken,
@@ -41,7 +101,39 @@ router.post(
   sellerController.addMenuItem,
 );
 
-/* Update Menu Item */
+/**
+ * @swagger
+ * /api/seller/menu/{id}:
+ *   put:
+ *     summary: Update menu item
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               stock:
+ *                 type: integer
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Menu item updated
+ */
 router.put(
   "/menu/:id",
   verifyToken,
@@ -50,7 +142,24 @@ router.put(
   sellerController.updateMenuItem,
 );
 
-/* Delete Menu Item */
+/**
+ * @swagger
+ * /api/seller/menu/{id}:
+ *   delete:
+ *     summary: Delete menu item
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Menu item deleted
+ */
 router.delete(
   "/menu/:id",
   verifyToken,
@@ -62,7 +171,24 @@ router.delete(
 /* ================= ORDER MANAGEMENT ============== */
 /* ================================================= */
 
-/* Get Orders */
+/**
+ * @swagger
+ * /api/seller/orders:
+ *   get:
+ *     summary: Get restaurant orders
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Order'
+ */
 router.get(
   "/orders",
   verifyToken,
@@ -70,7 +196,34 @@ router.get(
   sellerController.getOrders,
 );
 
-/* Update Order Status */
+/**
+ * @swagger
+ * /api/seller/orders/{id}/status:
+ *   put:
+ *     summary: Update order status
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [PENDING, CONFIRMED, PREPARING, READY, COMPLETED, CANCELLED]
+ *     responses:
+ *       200:
+ *         description: Order status updated
+ */
 router.put(
   "/orders/:id/status",
   verifyToken,
@@ -82,7 +235,18 @@ router.put(
 /* ================= ANALYTICS ===================== */
 /* ================================================= */
 
-/* Basic Analytics */
+/**
+ * @swagger
+ * /api/seller/analytics:
+ *   get:
+ *     summary: Get seller analytics
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Analytics data
+ */
 router.get(
   "/analytics",
   verifyToken,
@@ -90,7 +254,18 @@ router.get(
   sellerController.getAnalytics,
 );
 
-/* Forecast (Future ML Integration Ready) */
+/**
+ * @swagger
+ * /api/seller/forecast:
+ *   get:
+ *     summary: Get demand forecast
+ *     tags: [Seller]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Forecast data
+ */
 router.get(
   "/forecast",
   verifyToken,

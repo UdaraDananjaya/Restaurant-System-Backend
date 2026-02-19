@@ -1,0 +1,139 @@
+# Sequelize ORM & Swagger Setup Guide
+
+## ✅ What Was Added
+
+### 1. **Sequelize ORM**
+- **Models**: Created in `models/` directory
+  - User.js
+  - Restaurant.js
+  - MenuItem.js
+  - Order.js
+  - AdminLog.js
+  - index.js (with associations)
+
+- **Configuration**:
+  - `config/sequelize.js` - Sequelize connection
+  - `config/database.js` - Migration config
+  - `.sequelizerc` - Sequelize CLI config
+
+- **Migrations**: Created in `migrations/` directory
+  - All database tables with proper relationships
+
+### 2. **Swagger API Documentation**
+- **Configuration**: `config/swagger.js`
+- **Endpoint**: `http://localhost:5000/api-docs`
+- **Documentation added to all routes**:
+  - Authentication routes
+  - Admin routes
+  - Seller routes
+  - Customer routes
+
+### 3. **Updated Files**
+- `server.js` - Added Sequelize sync and Swagger UI
+- `seed/admin.seed.js` - Updated to use Sequelize
+- `utils/adminLogger.js` - Updated to use Sequelize
+- `package.json` - Added migration scripts
+
+## 🚀 How to Use
+
+### Run Migrations (First Time Setup)
+```bash
+npm run db:migrate
+```
+
+### Start the Server
+```bash
+npm run dev
+```
+
+### Access API Documentation
+Open your browser: `http://localhost:5000/api-docs`
+
+### Undo Last Migration
+```bash
+npm run db:migrate:undo
+```
+
+## 📚 Model Usage Examples
+
+### Import Models
+```javascript
+const { User, Restaurant, MenuItem, Order, AdminLog } = require('./models');
+```
+
+### Query Examples
+
+#### Find User
+```javascript
+const user = await User.findOne({ where: { email: 'test@example.com' } });
+```
+
+#### Create Restaurant
+```javascript
+const restaurant = await Restaurant.create({
+  seller_id: 2,
+  name: 'My Restaurant',
+  status: 'ACTIVE'
+});
+```
+
+#### Find with Associations
+```javascript
+const orders = await Order.findAll({
+  include: [
+    { model: User, as: 'customer' },
+    { model: Restaurant, as: 'restaurant' }
+  ]
+});
+```
+
+#### Update
+```javascript
+await User.update(
+  { status: 'APPROVED' },
+  { where: { id: userId } }
+);
+```
+
+#### Delete
+```javascript
+await MenuItem.destroy({ where: { id: menuItemId } });
+```
+
+## 🔄 Migration to Sequelize
+
+The project now supports BOTH:
+1. **Legacy MySQL Pool** (existing controllers still use raw SQL)
+2. **Sequelize ORM** (ready to use in new code)
+
+You can gradually migrate controllers to use Sequelize models.
+
+## 📝 Swagger Features
+
+- **Interactive API Testing**: Test all endpoints directly from browser
+- **Authentication Support**: Bearer token authentication
+- **Schema Documentation**: All request/response formats documented
+- **Organized by Tags**: Routes grouped by functionality
+
+## 🔧 Available NPM Scripts
+
+- `npm start` - Start production server
+- `npm run dev` - Start development server with nodemon
+- `npm run db:migrate` - Run all migrations
+- `npm run db:migrate:undo` - Undo last migration
+- `npm run db:seed` - Run all seeders
+
+## 📦 New Dependencies
+
+- `sequelize` - ORM framework
+- `sequelize-cli` - CLI for migrations
+- `swagger-jsdoc` - Generate Swagger specs from JSDoc
+- `swagger-ui-express` - Swagger UI for Express
+
+## 🎯 Next Steps
+
+1. **Migrate Controllers**: Update existing controllers to use Sequelize models instead of raw SQL
+2. **Add Validations**: Use Sequelize validators in models
+3. **Create Seeders**: Add more seed data using Sequelize seeders
+4. **Add Tests**: Write tests using Sequelize models
+

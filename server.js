@@ -74,9 +74,19 @@ app.get("/", (req, res) => {
 /* ================= START SERVER ================= */
 const startServer = async () => {
   try {
+    /* Test legacy MySQL connection */
     const connection = await pool.getConnection();
-    console.log("✅ MySQL Database Connected");
+    console.log("✅ MySQL Database Connected (Legacy Pool)");
     connection.release();
+
+    /* Sync Sequelize models with database */
+    await sequelize.authenticate();
+    console.log("✅ Sequelize ORM Connected");
+
+    // Sync models (creates tables if they don't exist)
+    // Use { alter: true } in development, { force: false } in production
+    await sequelize.sync({ alter: false });
+    console.log("✅ Database models synchronized");
 
     /* 🔥 Auto seed admin */
     await seedAdmin();
@@ -85,6 +95,7 @@ const startServer = async () => {
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
     });
   } catch (error) {
     console.error("❌ Startup failed:", error.message);

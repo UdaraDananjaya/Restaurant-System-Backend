@@ -1,11 +1,12 @@
-const pool = require("../config/db");
+const { AdminLog } = require("../models");
 
 const logAdminAction = async (adminId, action, targetUserId = null) => {
   try {
-    await pool.execute(
-      "INSERT INTO admin_logs (admin_id, action, target_user_id) VALUES (?, ?, ?)",
-      [adminId, action, targetUserId],
-    );
+    await AdminLog.create({
+      admin_id: adminId,
+      action: action,
+      target_user_id: targetUserId
+    });
   } catch (err) {
     console.error("Admin log failed:", err.message);
   }

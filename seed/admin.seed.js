@@ -1,29 +1,26 @@
 const bcrypt = require("bcryptjs");
-const pool = require("../config/db");
+const { User } = require("../models");
 
 const seedAdmin = async () => {
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE role = 'ADMIN'",
-    );
+    const existingAdmin = await User.findOne({
+      where: { role: 'ADMIN' }
+    });
 
-    if (rows.length > 0) {
+    if (existingAdmin) {
       console.log("ℹ️ Admin already exists – skipping seed");
       return;
     }
 
     const hashedPassword = await bcrypt.hash("Admin@123", 10);
 
-    await pool.execute(
-      "INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)",
-      [
-        "System Admin",
-        "admin@restaurant.com",
-        hashedPassword,
-        "ADMIN",
-        "APPROVED",
-      ],
-    );
+    await User.create({
+      name: "System Admin",
+      email: "admin@restaurant.com",
+      password: hashedPassword,
+      role: "ADMIN",
+      status: "APPROVED"
+    });
 
     console.log("🔥 Admin seeded successfully");
   } catch (err) {

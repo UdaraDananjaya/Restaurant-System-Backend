@@ -4,7 +4,7 @@ const { User } = require("../models");
 const seedAdmin = async () => {
   try {
     const existingAdmin = await User.findOne({
-      where: { role: 'ADMIN' }
+      where: { role: "ADMIN" },
     });
 
     if (existingAdmin) {
@@ -19,7 +19,7 @@ const seedAdmin = async () => {
       email: "admin@restaurant.com",
       password: hashedPassword,
       role: "ADMIN",
-      status: "APPROVED"
+      status: "APPROVED",
     });
 
     console.log("🔥 Admin seeded successfully");

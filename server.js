@@ -67,10 +67,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* ================= SWAGGER DOCUMENTATION ================= */
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs, {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: "Restaurant API Docs"
-}));
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(specs, {
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: "Restaurant API Docs",
+  }),
+);
 
 /* ================= ROUTES ================= */
 app.use("/api/auth", authRoutes);
@@ -95,9 +99,11 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("✅ Sequelize ORM Connected");
 
-    // Sync models (creates tables if they don't exist)
-    // Use { alter: true } in development, { force: false } in production
-    await sequelize.sync({ alter: false });
+    // Sync models (creates/updates tables if they don't exist)
+    // For development: allow alter to keep schema aligned with models.
+    // For production: prefer migrations and keep alter disabled.
+    const shouldAlter = process.env.NODE_ENV !== "production";
+    await sequelize.sync({ alter: shouldAlter });
     console.log("✅ Database models synchronized");
 
     /* 🔥 Auto seed admin */

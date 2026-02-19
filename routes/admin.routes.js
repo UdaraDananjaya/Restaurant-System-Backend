@@ -160,6 +160,63 @@ router.get("/orders", verifyToken, checkRole(["ADMIN"]), admin.getAllOrders);
 
 /**
  * @swagger
+ * /api/admin/restaurants:
+ *   get:
+ *     summary: Get all restaurants
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of restaurants
+ */
+router.get(
+  "/restaurants",
+  verifyToken,
+  checkRole(["ADMIN"]),
+  admin.getRestaurants,
+);
+
+/**
+ * @swagger
+ * /api/admin/user-distribution:
+ *   get:
+ *     summary: Get user distribution for charts
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Chart.js compatible distribution
+ */
+router.get(
+  "/user-distribution",
+  verifyToken,
+  checkRole(["ADMIN"]),
+  admin.userDistribution,
+);
+
+/**
+ * @swagger
+ * /api/admin/fast-moving-restaurants:
+ *   get:
+ *     summary: Get fast-moving restaurants (top by orders)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Fast-moving restaurants list
+ */
+router.get(
+  "/fast-moving-restaurants",
+  verifyToken,
+  checkRole(["ADMIN"]),
+  admin.fastMovingRestaurants,
+);
+
+/**
+ * @swagger
  * /api/admin/logs:
  *   get:
  *     summary: Get admin activity logs
@@ -214,6 +271,25 @@ router.get(
   verifyToken,
   checkRole(["ADMIN"]),
   admin.exportOrdersCSV,
+);
+
+/**
+ * @swagger
+ * /api/admin/export/restaurants:
+ *   get:
+ *     summary: Export restaurants as CSV
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV file
+ */
+router.get(
+  "/export/restaurants",
+  verifyToken,
+  checkRole(["ADMIN"]),
+  admin.exportRestaurantsCSV,
 );
 
 /**

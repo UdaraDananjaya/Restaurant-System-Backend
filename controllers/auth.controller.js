@@ -1,4 +1,4 @@
-const { User } = require("../models");
+const { User, Customer, Restaurant, sequelize } = require("../models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -12,7 +12,7 @@ exports.login = async (req, res) => {
 
     /* 🔎 1. Check user exists */
     const user = await User.findOne({
-      where: { email }
+      where: { email },
     });
 
     if (!user) {
@@ -80,7 +80,26 @@ exports.login = async (req, res) => {
 
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const {
+      // shared
+      name,
+      email,
+      password,
+      role,
+
+      // customer
+      age,
+      gender,
+      genderOtherText,
+      dietaryPref,
+      favoriteCuisine,
+
+      // seller
+      restaurantName,
+      contactNumber,
+      restaurantAddress,
+      restaurantCuisines,
+    } = req.body;
 
     /* 🧾 1. Validate input */
     if (!name || !email || !password || !role) {
@@ -91,7 +110,7 @@ exports.register = async (req, res) => {
 
     /* 🔎 2. Check if email already exists */
     const existing = await User.findOne({
-      where: { email }
+      where: { email },
     });
 
     if (existing) {
@@ -103,16 +122,99 @@ exports.register = async (req, res) => {
     /* 🔐 3. Hash password */
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // --- Role-specific validation (matches your updated frontend register form) ---
+    if (role === "CUSTOMER") {
+      if (!age || Number(age) <= 0) {
+        return res.status(400).json({ message: "Valid age is required" });
+      }
+      if (!gender) {
+        return res.status(400).json({ message: "Gender is required" });
+      }
+      if (gender === "Other" && !genderOtherText) {
+        return res
+          .status(400)
+          .json({ message: "Please specify your gender (Other)" });
+      }
+      if (!Array.isArray(dietaryPref) || dietaryPref.length === 0) {
+        return res
+          .status(400)
+          .json({ message: "Select at least one dietary preference" });
+      }
+      if (!favoriteCuisine) {
+        return res
+          .status(400)
+          .json({ message: "Favorite cuisine is required" });
+      }
+    }
+
+    if (role === "SELLER") {
+      if (!restaurantName) {
+        return res.status(400).json({ message: "Restaurant name is required" });
+      }
+      if (!contactNumber) {
+        return res.status(400).json({ message: "Contact number is required" });
+      }
+      if (!restaurantAddress) {
+        return res
+          .status(400)
+          .json({ message: "Restaurant address/area is required" });
+      }
+      if (
+        !Array.isArray(restaurantCuisines) ||
+        restaurantCuisines.length === 0
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Select at least one restaurant cuisine" });
+      }
+    }
+
     /* 🚦 4. Set default status */
     const status = role === "SELLER" ? "PENDING" : "APPROVED";
 
-    /* 💾 5. Insert user */
-    await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role,
-      status
+    /* 💾 5. Create records in a transaction */
+    await sequelize.transaction(async (t) => {
+      const newUser = await User.create(
+        {
+          name,
+          email,
+          password: hashedPassword,
+          role,
+          status,
+        },
+        { transaction: t },
+      );
+
+      if (role === "CUSTOMER") {
+        await Customer.create(
+          {
+            user_id: newUser.id,
+            age: Number(age),
+            gender,
+            gender_other_text: gender === "Other" ? genderOtherText : null,
+            dietary_preferences: dietaryPref,
+            favorite_cuisine: favoriteCuisine,
+            order_history: [],
+          },
+          { transaction: t },
+        );
+      }
+
+      if (role === "SELLER") {
+        // Create a restaurant shell for the seller.
+        // Keep restaurant INACTIVE until admin approves the seller.
+        await Restaurant.create(
+          {
+            seller_id: newUser.id,
+            name: restaurantName,
+            contact_number: contactNumber,
+            address: restaurantAddress,
+            cuisines: restaurantCuisines,
+            status: "INACTIVE",
+          },
+          { transaction: t },
+        );
+      }
     });
 
     /* 🎯 6. Send response */
@@ -127,4 +229,3 @@ exports.register = async (req, res) => {
     res.status(500).json({ message: "Registration failed" });
   }
 };
-

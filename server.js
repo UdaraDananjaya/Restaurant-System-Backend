@@ -9,6 +9,12 @@ const helmet = require("helmet");
 /* 🔹 MySQL pool */
 const pool = require("./config/db");
 
+/* 🔹 Sequelize ORM */
+const { sequelize } = require("./models");
+
+/* 🔹 Swagger Documentation */
+const { swaggerUi, specs } = require("./config/swagger");
+
 /* 🔹 Admin seed */
 const seedAdmin = require("./seed/admin.seed");
 
@@ -59,6 +65,12 @@ app.use(express.urlencoded({ extended: true }));
 
 /* ================= STATIC FILES ================= */
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+/* ================= SWAGGER DOCUMENTATION ================= */
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "Restaurant API Docs"
+}));
 
 /* ================= ROUTES ================= */
 app.use("/api/auth", authRoutes);

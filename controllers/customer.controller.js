@@ -176,17 +176,45 @@ exports.getOrders = async (req, res) => {
 /**
  * Get personalized restaurant recommendations
  */
+const axios = require("axios");
+
 exports.getRecommendations = async (req, res) => {
   try {
-    const limit = req.query.limit || 5;
+    const { orders, limit = 5 } = req.body;
 
-    // Use recommendation service with advanced scoring
-    const recommendations = await recommendationService(req.user.id, limit);
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({
+        message: "Orders must be a non-empty array",
+      });
+    }
 
-    res.json({ recommended: recommendations });
+    // 🔹 Call ML API
+    const response = await axios.post(
+      "http://127.0.0.1:8000/recommend_ml",
+      { orders },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          accept: "application/json",
+        },
+      },
+    );
+
+    console.log(response);
+
+    // Adjust based on your ML response structure
+    const recommendations =
+      response.data?.recommended || response.data?.recommended_items || [];
+
+    res.status(200).json({
+      recommended: recommendations.slice(0, limit),
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch recommendations" });
+    console.error("ML Recommendation Error:", err.message);
+
+    res.status(500).json({
+      message: "Failed to fetch recommendations from ML service",
+    });
   }
 };
 

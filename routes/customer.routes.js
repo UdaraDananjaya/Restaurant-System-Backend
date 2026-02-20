@@ -140,20 +140,29 @@ router.get(
 /**
  * @swagger
  * /api/customer/recommendations:
- *   get:
- *     summary: Get personalized restaurant recommendations
+ *   post:
+ *     summary: Get recommendations based on order items
  *     tags: [Customer]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of recommendations to return
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orders
+ *             properties:
+ *               orders:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ["Koththu", "Parata"]
+ *               limit:
+ *                 type: integer
+ *                 example: 5
  *     responses:
  *       200:
- *         description: Recommended restaurants
+ *         description: Recommended items
  *         content:
  *           application/json:
  *             schema:
@@ -162,14 +171,11 @@ router.get(
  *                 recommended:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Restaurant'
+ *                     type: string
+ *       400:
+ *         description: Invalid input
  */
-router.get(
-  "/recommendations",
-  verifyToken,
-  checkRole(["CUSTOMER"]),
-  customerController.getRecommendations,
-);
+router.post("/recommendations", customerController.getRecommendations);
 
 /**
  * @swagger

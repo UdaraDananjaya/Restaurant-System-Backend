@@ -30,8 +30,13 @@ exports.login = async (req, res) => {
       });
     }
 
-    /* 🚦 3. Check account status */
-    if (user.status === "PENDING") {
+    /* 🚦 3. Check account status
+       - Customers can login only when APPROVED (default is APPROVED)
+       - Sellers may login even when PENDING so they can see the seller dashboard
+         with a "Waiting for approval" notice. Protected seller actions should
+         still enforce APPROVED on the backend where needed.
+    */
+    if (user.status === "PENDING" && user.role !== "SELLER") {
       return res.status(403).json({
         message: "Your account is waiting for admin approval.",
       });
@@ -49,13 +54,14 @@ exports.login = async (req, res) => {
       });
     }
 
-    /* ✅ Only APPROVED users reach here */
+    /* ✅ Approved users (and PENDING sellers) reach here */
 
     const token = jwt.sign(
       {
         id: user.id,
         role: user.role,
         email: user.email,
+        status: user.status,
       },
       process.env.JWT_SECRET,
       { expiresIn: "8h" },
@@ -227,5 +233,39 @@ exports.register = async (req, res) => {
   } catch (err) {
     console.error("REGISTER ERROR:", err);
     res.status(500).json({ message: "Registration failed" });
+  }
+};
+
+/* ================================================= */
+/* ================= CURRENT USER ================== */
+/* ================================================= */
+
+// GET /api/auth/me
+// Requires auth.middleware.js
+exports.me = async (req, res) => {
+  try {
+    // ✅ SAFETY: middleware must set req.user
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) {
+      console.error("ME ERROR: req.user missing or invalid:", req.user);
+      return res.status(401).json({
+        message: "Invalid token payload (missing user id)",
+      });
+    }
+
+    const user = await User.findByPk(userId, {
+      attributes: ["id", "name", "email", "role", "status"],
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json(user);
+  } catch (err) {
+    console.error("ME ERROR:", err);
+    res.status(500).json({
+      message: "Failed to load user",
+      error: err.message,
+    });
   }
 };

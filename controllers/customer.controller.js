@@ -7,15 +7,30 @@ const customerService = require("../services/customer.service");
  */
 exports.getRestaurants = async (req, res) => {
   try {
+    const { cuisine } = req.query;
+
     const restaurants = await Restaurant.findAll({
-      where: { status: 'ACTIVE' },
-      include: [{
-        model: User,
-        as: 'seller',
-        attributes: ['id', 'name', 'email']
-      }],
-      order: [['created_at', 'DESC']]
+      where: { status: "ACTIVE" },
+      include: [
+        {
+          model: User,
+          as: "seller",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+      order: [["created_at", "DESC"]],
     });
+
+    // Optional cuisine filtering (stored as JSON array in DB)
+    if (cuisine) {
+      const needle = String(cuisine).trim().toLowerCase();
+      const filtered = restaurants.filter((r) =>
+        Array.isArray(r.cuisines)
+          ? r.cuisines.some((c) => String(c).toLowerCase() === needle)
+          : false,
+      );
+      return res.json(filtered);
+    }
 
     res.json(restaurants);
   } catch (err) {
@@ -34,9 +49,9 @@ exports.getRestaurantMenu = async (req, res) => {
     const menu = await MenuItem.findAll({
       where: {
         restaurant_id: restaurantId,
-        is_available: true
+        is_available: true,
       },
-      order: [['name', 'ASC']]
+      order: [["name", "ASC"]],
     });
 
     res.json(menu);
@@ -68,20 +83,20 @@ exports.placeOrder = async (req, res) => {
         where: {
           id: item.menuItemId,
           restaurant_id: restaurantId,
-          is_available: true
-        }
+          is_available: true,
+        },
       });
 
       if (!menuItem) {
         return res.status(400).json({
-          message: `Menu item ${item.menuItemId} not found or unavailable`
+          message: `Menu item ${item.menuItemId} not found or unavailable`,
         });
       }
 
       // Check stock
       if (menuItem.stock < item.qty) {
         return res.status(400).json({
-          message: `Insufficient stock for ${menuItem.name}`
+          message: `Insufficient stock for ${menuItem.name}`,
         });
       }
 
@@ -94,13 +109,13 @@ exports.placeOrder = async (req, res) => {
         name: menuItem.name,
         price: menuItem.price,
         qty: item.qty,
-        portion: item.portion || 'regular'
+        portion: item.portion || "regular",
       });
 
       // Update stock and orders count
       await menuItem.update({
         stock: menuItem.stock - item.qty,
-        orders_count: menuItem.orders_count + item.qty
+        orders_count: menuItem.orders_count + item.qty,
       });
     }
 
@@ -110,7 +125,7 @@ exports.placeOrder = async (req, res) => {
       restaurant_id: restaurantId,
       items: enrichedItems,
       total_amount: totalAmount,
-      status: 'PENDING'
+      status: "PENDING",
     });
 
     // Fetch order with relations for response
@@ -118,15 +133,15 @@ exports.placeOrder = async (req, res) => {
       include: [
         {
           model: Restaurant,
-          as: 'restaurant',
-          attributes: ['id', 'name']
-        }
-      ]
+          as: "restaurant",
+          attributes: ["id", "name"],
+        },
+      ],
     });
 
     res.status(201).json({
       message: "Order placed successfully",
-      order: orderWithDetails
+      order: orderWithDetails,
     });
   } catch (err) {
     console.error(err);
@@ -144,11 +159,11 @@ exports.getOrders = async (req, res) => {
       include: [
         {
           model: Restaurant,
-          as: 'restaurant',
-          attributes: ['id', 'name', 'image']
-        }
+          as: "restaurant",
+          attributes: ["id", "name", "image"],
+        },
       ],
-      order: [['created_at', 'DESC']]
+      order: [["created_at", "DESC"]],
     });
 
     res.json(orders);
@@ -180,10 +195,16 @@ exports.getRecommendations = async (req, res) => {
  */
 exports.updateCustomerProfile = async (req, res) => {
   try {
-    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+    const {
+      age,
+      gender,
+      dietary_preferences,
+      favorite_cuisine,
+      order_history,
+    } = req.body;
 
     let customer = await Customer.findOne({
-      where: { user_id: req.user.id }
+      where: { user_id: req.user.id },
     });
 
     if (!customer) {
@@ -193,21 +214,28 @@ exports.updateCustomerProfile = async (req, res) => {
         gender,
         dietary_preferences: dietary_preferences || [],
         favorite_cuisine,
-        order_history: order_history || []
+        order_history: order_history || [],
       });
     } else {
       await customer.update({
         age: age !== undefined ? age : customer.age,
         gender: gender !== undefined ? gender : customer.gender,
-        dietary_preferences: dietary_preferences !== undefined ? dietary_preferences : customer.dietary_preferences,
-        favorite_cuisine: favorite_cuisine !== undefined ? favorite_cuisine : customer.favorite_cuisine,
-        order_history: order_history !== undefined ? order_history : customer.order_history
+        dietary_preferences:
+          dietary_preferences !== undefined
+            ? dietary_preferences
+            : customer.dietary_preferences,
+        favorite_cuisine:
+          favorite_cuisine !== undefined
+            ? favorite_cuisine
+            : customer.favorite_cuisine,
+        order_history:
+          order_history !== undefined ? order_history : customer.order_history,
       });
     }
 
     res.json({
       message: "Customer profile updated successfully",
-      profile: customer
+      profile: customer,
     });
   } catch (err) {
     console.error(err);
@@ -241,15 +269,23 @@ exports.getCustomerProfile = async (req, res) => {
  */
 exports.createCustomerProfile = async (req, res) => {
   try {
-    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+    const {
+      age,
+      gender,
+      dietary_preferences,
+      favorite_cuisine,
+      order_history,
+    } = req.body;
 
     // Check if customer profile already exists
     const existingCustomer = await Customer.findOne({
-      where: { user_id: req.user.id }
+      where: { user_id: req.user.id },
     });
 
     if (existingCustomer) {
-      return res.status(409).json({ message: "Customer profile already exists" });
+      return res
+        .status(409)
+        .json({ message: "Customer profile already exists" });
     }
 
     const customer = await customerService.createCustomer(req.user.id, {
@@ -257,12 +293,12 @@ exports.createCustomerProfile = async (req, res) => {
       gender,
       dietary_preferences,
       favorite_cuisine,
-      order_history
+      order_history,
     });
 
     res.status(201).json({
       message: "Customer profile created successfully",
-      profile: customer
+      profile: customer,
     });
   } catch (err) {
     console.error(err);
@@ -275,23 +311,29 @@ exports.createCustomerProfile = async (req, res) => {
  */
 exports.updateCustomerProfileData = async (req, res) => {
   try {
-    const { age, gender, dietary_preferences, favorite_cuisine, order_history } = req.body;
+    const {
+      age,
+      gender,
+      dietary_preferences,
+      favorite_cuisine,
+      order_history,
+    } = req.body;
 
     const customer = await customerService.updateCustomer(req.user.id, {
       age,
       gender,
       dietary_preferences,
       favorite_cuisine,
-      order_history
+      order_history,
     });
 
     res.json({
       message: "Customer profile updated successfully",
-      profile: customer
+      profile: customer,
     });
   } catch (err) {
     console.error(err);
-    if (err.message === 'Customer profile not found') {
+    if (err.message === "Customer profile not found") {
       return res.status(404).json({ message: err.message });
     }
     res.status(500).json({ message: "Failed to update customer profile" });
@@ -306,7 +348,7 @@ exports.deleteCustomerProfile = async (req, res) => {
     const customerId = req.params.id;
 
     // Check authorization - customer can only delete their own, admin can delete any
-    if (req.user.role !== 'ADMIN' && req.user.id !== customerId) {
+    if (req.user.role !== "ADMIN" && req.user.id !== customerId) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
@@ -315,7 +357,7 @@ exports.deleteCustomerProfile = async (req, res) => {
     res.json({ message: "Customer profile deleted successfully" });
   } catch (err) {
     console.error(err);
-    if (err.message === 'Customer profile not found') {
+    if (err.message === "Customer profile not found") {
       return res.status(404).json({ message: err.message });
     }
     res.status(500).json({ message: "Failed to delete customer profile" });
@@ -334,7 +376,7 @@ exports.suspendCustomer = async (req, res) => {
     res.json({ message: "Customer suspended successfully" });
   } catch (err) {
     console.error(err);
-    if (err.message === 'Customer profile not found') {
+    if (err.message === "Customer profile not found") {
       return res.status(404).json({ message: err.message });
     }
     res.status(500).json({ message: "Failed to suspend customer" });
@@ -353,7 +395,7 @@ exports.reactivateCustomer = async (req, res) => {
     res.json({ message: "Customer reactivated successfully" });
   } catch (err) {
     console.error(err);
-    if (err.message === 'Customer profile not found') {
+    if (err.message === "Customer profile not found") {
       return res.status(404).json({ message: err.message });
     }
     res.status(500).json({ message: "Failed to reactivate customer" });
@@ -373,4 +415,3 @@ exports.getAllCustomers = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch customers" });
   }
 };
-

@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 
 const authController = require("../controllers/auth.controller");
 const passwordController = require("../controllers/password.controller");
+const verifyToken = require("../middleware/auth.middleware");
 
 /* ================= LOGIN RATE LIMIT ================= */
 const loginLimiter = rateLimit({
@@ -104,6 +105,22 @@ router.post("/login", loginLimiter, authController.login);
  *         description: Validation error or user exists
  */
 router.post("/register", authController.register);
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current logged-in user
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user details
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/me", verifyToken, authController.me);
 
 /* ================= PASSWORD RESET ================= */
 

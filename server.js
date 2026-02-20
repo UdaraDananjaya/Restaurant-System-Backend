@@ -99,11 +99,9 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("✅ Sequelize ORM Connected");
 
-    // Sync models (creates/updates tables if they don't exist)
-    // For development: allow alter to keep schema aligned with models.
-    // For production: prefer migrations and keep alter disabled.
-    const shouldAlter = process.env.NODE_ENV !== "production";
-    await sequelize.sync({ alter: shouldAlter });
+    // Sync models (creates tables if they don't exist)
+    // Use { alter: true } in development, { force: false } in production
+    await sequelize.sync({ alter: false });
     console.log("✅ Database models synchronized");
 
     /* 🔥 Auto seed admin */

@@ -180,18 +180,78 @@ const axios = require("axios");
 
 exports.getRecommendations = async (req, res) => {
   try {
-    const { orders, limit = 5 } = req.body;
+    const userId = req.user.id;
 
-    if (!Array.isArray(orders) || orders.length === 0) {
+    console.log("🔍 Fetching orders for user ID:", userId);
+
+    const limit = 5; // Default limit
+
+    // 📦 Fetch all customer's orders automatically
+    const customerOrders = await Order.findAll({
+      where: { user_id: userId },
+      attributes: [ "items"],
+    });
+
+    console.log("📦 Total orders found:", customerOrders.length);
+
+    if (customerOrders.length === 0) {
       return res.status(400).json({
-        message: "Orders must be a non-empty array",
+        message: "No order history found for recommendations",
       });
     }
 
-    // 🔹 Call ML API
+    // Log first order to see structure
+    console.log("📋 First order structure:", JSON.stringify(customerOrders[0], null, 2));
+
+    // 📝 Extract unique item names from all orders
+    const itemNamesSet = new Set();
+
+    customerOrders.forEach((order, index) => {
+      // Parse items if it's a JSON string
+      let orderItems = order.items;
+
+      if (typeof orderItems === 'string') {
+        try {
+          orderItems = JSON.parse(orderItems);
+        } catch (e) {
+          console.error(`  ❌ Failed to parse items for order ${index + 1}:`, e.message);
+          return;
+        }
+      }
+
+      console.log(`🔸 Order ${index + 1} items:`, orderItems);
+
+      if (Array.isArray(orderItems)) {
+        orderItems.forEach((item) => {
+          console.log("  📌 Item:", item);
+          if (item.name) {
+            itemNamesSet.add(item.name);
+            console.log("  ✅ Added:", item.name);
+          } else {
+            console.log("  ⚠️ Item has no name property");
+          }
+        });
+      } else {
+        console.log("  ❌ Items is not an array after parsing");
+      }
+    });
+
+    // Convert Set to Array for unique item names
+    const enrichedOrders = Array.from(itemNamesSet);
+
+    console.log("\n📊 Final enriched orders (unique item names):", enrichedOrders);
+    console.log("📊 Total unique items:", enrichedOrders.length);
+
+    if (enrichedOrders.length === 0) {
+      return res.status(400).json({
+        message: "No items found in order history",
+      });
+    }
+
+    // 🔹 Call ML API with enriched order data
     const response = await axios.post(
       "http://127.0.0.1:8000/recommend_ml",
-      { orders },
+      { orders: enrichedOrders },
       {
         headers: {
           "Content-Type": "application/json",
@@ -200,12 +260,14 @@ exports.getRecommendations = async (req, res) => {
       },
     );
 
-    console.log(response);
+    console.log("🤖 ML Response:", response.data);
 
     // Adjust based on your ML response structure
     const recommendations =
         response.data?.recommended_food
-            ? [response.data.recommended_food]
+            ? Array.isArray(response.data.recommended_food)
+              ? response.data.recommended_food
+              : [response.data.recommended_food]
             : [];
 
     res.status(200).json({
@@ -213,10 +275,12 @@ exports.getRecommendations = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("ML Recommendation Error:", err.message);
+    console.error("❌ ML Recommendation Error:", err.message);
+    console.error("❌ Full error:", err);
 
     res.status(500).json({
       message: "Failed to fetch recommendations from ML service",
+      error: err.message,
     });
   }
 };

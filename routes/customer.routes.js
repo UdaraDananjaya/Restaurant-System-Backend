@@ -140,26 +140,11 @@ router.get(
 /**
  * @swagger
  * /api/customer/recommendations:
- *   post:
- *     summary: Get recommendations based on order items
+ *   get:
+ *     summary: Get recommendations based on order history
  *     tags: [Customer]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - orders
- *             properties:
- *               orders:
- *                 type: array
- *                 items:
- *                   type: string
- *                 example: ["Koththu", "Parata"]
- *               limit:
- *                 type: integer
- *                 example: 5
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Recommended items
@@ -173,9 +158,14 @@ router.get(
  *                   items:
  *                     type: string
  *       400:
- *         description: Invalid input
+ *         description: No order history found
  */
-router.post("/recommendations", customerController.getRecommendations);
+router.get(
+  "/recommendations",
+  verifyToken,
+  checkRole(["CUSTOMER"]),
+  customerController.getRecommendations,
+);
 
 /**
  * @swagger

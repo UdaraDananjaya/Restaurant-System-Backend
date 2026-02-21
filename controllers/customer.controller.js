@@ -204,11 +204,14 @@ exports.getRecommendations = async (req, res) => {
 
     // Adjust based on your ML response structure
     const recommendations =
-      response.data?.recommended || response.data?.recommended_items || [];
+        response.data?.recommended_food
+            ? [response.data.recommended_food]
+            : [];
 
     res.status(200).json({
       recommended: recommendations.slice(0, limit),
     });
+
   } catch (err) {
     console.error("ML Recommendation Error:", err.message);
 

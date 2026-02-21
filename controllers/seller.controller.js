@@ -310,11 +310,19 @@ exports.getForecast = async (req, res) => {
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    // Get last 5 days orders (example logic)
+    // Get last 30 days of orders
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     const recentOrders = await Order.findAll({
-      where: { restaurant_id: restaurant.id },
-      order: [["created_at", "DESC"]],
-      limit: 5,
+      where: {
+        restaurant_id: restaurant.id,
+        created_at: {
+          [require("sequelize").Op.gte]: thirtyDaysAgo,
+        },
+      },
+      order: [["created_at", "ASC"]],
+      attributes: ["id", "total_amount", "created_at"],
     });
 
     if (recentOrders.length === 0) {
@@ -323,17 +331,36 @@ exports.getForecast = async (req, res) => {
       });
     }
 
-    // Extract sales amounts
-    const sales = recentOrders
-        .map((o) => o.total_amount)
-        .reverse(); // oldest → newest
+    // 📊 Group orders by date and sum total sales for each day
+    const dailySales = {};
+    recentOrders.forEach((order) => {
+      const date = new Date(order.created_at).toISOString().split("T")[0]; // YYYY-MM-DD
+      if (!dailySales[date]) {
+        dailySales[date] = 0;
+      }
+      // Add order amount to daily total
+      dailySales[date] += parseFloat(order.total_amount) || 0;
+    });
 
-    const days = sales.map((_, index) => index + 1);
+    // 📅 Get sorted dates and sales
+    const sortedDates = Object.keys(dailySales).sort();
+    const salesData = sortedDates.map((date) => dailySales[date]);
 
-    // 🔹 Call ML forecast API
+    if (salesData.length < 3) {
+      return res.status(400).json({
+        message: "Need at least 3 days of order data for forecasting",
+      });
+    }
+
+    // 🔢 Create numbered days array [1, 2, 3, 4, 5, ...]
+    const days = Array.from({ length: salesData.length }, (_, i) => i + 1);
+
+    console.log("📊 Daily Sales Data:", { days, sales: salesData });
+
+    // 🔹 Call ML forecast API with days and sales
     const response = await axios.post(
         "http://127.0.0.1:8000/forecast",
-        { days, sales },
+        { days, sales: salesData },
         {
           headers: {
             "Content-Type": "application/json",
@@ -343,6 +370,10 @@ exports.getForecast = async (req, res) => {
     );
 
     res.json({
+      historical_data: {
+        days,
+        sales: salesData,
+      },
       forecast: response.data?.next_7_days_forecast || [],
     });
 

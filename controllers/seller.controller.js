@@ -1,4 +1,5 @@
-const { Restaurant, MenuItem, Order, User } = require("../models");
+const { Restaurant, MenuItem, Order, User, Sequelize } = require("../models");
+const axios = require("axios");
 
 /* ================================================= */
 /* ================= RESTAURANT ==================== */
@@ -12,13 +13,12 @@ exports.getRestaurant = async (req, res) => {
 
     res.json(restaurant || null);
   } catch (err) {
-    console.error(err);
+    console.error("getRestaurant Error:", err);
     res.status(500).json({ message: "Failed to fetch restaurant" });
   }
 };
 
 /**
- * ✅ NEW
  * Create or update seller restaurant profile
  * Supports multipart/form-data (image optional)
  */
@@ -32,23 +32,18 @@ exports.updateRestaurantProfile = async (req, res) => {
       where: { seller_id: req.user.id },
     });
 
-    // cuisines might come as JSON string or comma separated
-    // We'll store as string safely (you can later convert to array if you want)
-    let cuisinesValue = cuisines;
-    if (typeof cuisines === "string") {
-      cuisinesValue = cuisines; // keep as string (ex: "Sri Lankan,Chinese")
-    }
-
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (address !== undefined) updateData.address = address;
     if (contact !== undefined) updateData.contact = contact;
     if (opening_hours !== undefined) updateData.opening_hours = opening_hours;
-    if (cuisinesValue !== undefined) updateData.cuisines = cuisinesValue;
+
+    // cuisines may come as JSON string or comma-separated; store as string
+    if (cuisines !== undefined) updateData.cuisines = String(cuisines);
+
     if (imagePath) updateData.image = imagePath;
 
     if (!restaurant) {
-      // Create new restaurant if not exists
       restaurant = await Restaurant.create({
         seller_id: req.user.id,
         ...updateData,
@@ -62,7 +57,7 @@ exports.updateRestaurantProfile = async (req, res) => {
 
     res.json({ message: "✅ Restaurant updated", restaurant });
   } catch (err) {
-    console.error(err);
+    console.error("updateRestaurantProfile Error:", err);
     res.status(500).json({ message: "Failed to update restaurant" });
   }
 };
@@ -86,7 +81,7 @@ exports.getMenu = async (req, res) => {
 
     res.json(menu);
   } catch (err) {
-    console.error(err);
+    console.error("getMenu Error:", err);
     res.status(500).json({ message: "Failed to fetch menu" });
   }
 };
@@ -116,7 +111,7 @@ exports.addMenuItem = async (req, res) => {
 
     res.json({ message: "✅ Menu item added successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("addMenuItem Error:", err);
     res.status(500).json({ message: "Failed to add menu item" });
   }
 };
@@ -127,7 +122,7 @@ exports.updateMenuItem = async (req, res) => {
 
     const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
 
-    // 🔐 Ensure item belongs to this seller
+    // Ensure item belongs to this seller
     const menuItem = await MenuItem.findOne({
       where: { id: req.params.id },
       include: [
@@ -143,11 +138,10 @@ exports.updateMenuItem = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized action" });
     }
 
-    // Build update object with only provided fields
     const updateData = {};
     if (name !== undefined) updateData.name = name;
-    if (price !== undefined) updateData.price = price;
-    if (stock !== undefined) updateData.stock = stock;
+    if (price !== undefined) updateData.price = Number(price);
+    if (stock !== undefined) updateData.stock = Number(stock);
     if (isAvailable !== undefined) updateData.is_available = isAvailable;
     if (imagePath) updateData.image = imagePath;
 
@@ -155,14 +149,13 @@ exports.updateMenuItem = async (req, res) => {
 
     res.json({ message: "✅ Menu item updated" });
   } catch (err) {
-    console.error(err);
+    console.error("updateMenuItem Error:", err);
     res.status(500).json({ message: "Failed to update menu item" });
   }
 };
 
 exports.deleteMenuItem = async (req, res) => {
   try {
-    // 🔐 Ensure ownership before delete
     const menuItem = await MenuItem.findOne({
       where: { id: req.params.id },
       include: [
@@ -182,7 +175,7 @@ exports.deleteMenuItem = async (req, res) => {
 
     res.json({ message: "✅ Menu item deleted" });
   } catch (err) {
-    console.error(err);
+    console.error("deleteMenuItem Error:", err);
     res.status(500).json({ message: "Failed to delete menu item" });
   }
 };
@@ -213,7 +206,7 @@ exports.getOrders = async (req, res) => {
 
     res.json(orders);
   } catch (err) {
-    console.error(err);
+    console.error("getOrders Error:", err);
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 };
@@ -246,7 +239,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     res.json({ message: "✅ Order status updated" });
   } catch (err) {
-    console.error(err);
+    console.error("updateOrderStatus Error:", err);
     res.status(500).json({ message: "Failed to update order" });
   }
 };
@@ -270,7 +263,7 @@ exports.getAnalytics = async (req, res) => {
 
     res.json(menuItems);
   } catch (err) {
-    console.error(err);
+    console.error("getAnalytics Error:", err);
     res.status(500).json({ message: "Analytics failed" });
   }
 };
@@ -279,15 +272,74 @@ exports.getAnalytics = async (req, res) => {
 /* ================= FORECAST ====================== */
 /* ================================================= */
 
-exports.getForecast = (req, res) => {
-  // Placeholder (can integrate ML model later)
-  res.json([
-    { day: "Mon", orders: 10 },
-    { day: "Tue", orders: 14 },
-    { day: "Wed", orders: 18 },
-    { day: "Thu", orders: 22 },
-    { day: "Fri", orders: 28 },
-    { day: "Sat", orders: 35 },
-    { day: "Sun", orders: 30 },
-  ]);
+exports.getForecast = async (req, res) => {
+  try {
+    const restaurant = await Restaurant.findOne({
+      where: { seller_id: req.user.id },
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    // ✅ Better: get last 14 days daily sales totals (not last 5 orders)
+    const since = new Date();
+    since.setDate(since.getDate() - 14);
+
+    const daily = await Order.findAll({
+      where: {
+        restaurant_id: restaurant.id,
+        created_at: { [Sequelize.Op.gte]: since },
+      },
+      attributes: [
+        // for MySQL: DATE(created_at)
+        [Sequelize.fn("DATE", Sequelize.col("created_at")), "day"],
+        [Sequelize.fn("SUM", Sequelize.col("total_amount")), "total"],
+      ],
+      group: [Sequelize.fn("DATE", Sequelize.col("created_at"))],
+      order: [[Sequelize.fn("DATE", Sequelize.col("created_at")), "ASC"]],
+      raw: true,
+    });
+
+    // If not enough data, return safe response (so dashboard won't break)
+    if (!daily || daily.length < 3) {
+      return res.json({
+        forecast: [],
+        note: "Not enough order data for forecasting (need at least 3 days).",
+      });
+    }
+
+    const sales = daily.map((d) => Number(d.total));
+    const days = sales.map((_, idx) => idx + 1);
+
+    const ML_BASE_URL = (
+      process.env.ML_BASE_URL || "http://127.0.0.1:8000"
+    ).replace(/\/$/, "");
+
+    // Call ML forecast API
+    const response = await axios.post(
+      `${ML_BASE_URL}/forecast`,
+      { days, sales },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          accept: "application/json",
+        },
+        timeout: 8000, // ✅ avoid hanging forever
+      },
+    );
+
+    res.json({
+      forecast: response.data?.next_7_days_forecast || [],
+    });
+  } catch (err) {
+    // ✅ log useful details
+    console.error("Forecast Error:", err.response?.data || err.message);
+
+    // ✅ do not kill dashboard; return safe response
+    return res.json({
+      forecast: [],
+      note: "ML service unavailable or forecast failed.",
+    });
+  }
 };

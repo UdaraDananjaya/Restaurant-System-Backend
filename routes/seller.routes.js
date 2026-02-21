@@ -428,17 +428,33 @@ router.get(
  * @swagger
  * /api/seller/forecast:
  *   get:
- *     summary: Get demand forecast
+ *     summary: Get 7-day demand forecast using ML model
  *     tags: [Seller]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Forecast data
+ *         description: 7-day sales forecast from ML service
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 forecast:
+ *                   type: array
+ *                   items:
+ *                     type: number
+ *                   example: [56, 57, 59, 60, 61, 62, 63]
+ *       400:
+ *         description: Not enough data for forecasting
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden (not a seller)
+ *       404:
+ *         description: Restaurant not found
+ *       500:
+ *         description: Failed to fetch forecast from ML service
  */
 router.get(
   "/forecast",

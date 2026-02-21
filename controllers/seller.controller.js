@@ -279,15 +279,57 @@ exports.getAnalytics = async (req, res) => {
 /* ================= FORECAST ====================== */
 /* ================================================= */
 
-exports.getForecast = (req, res) => {
-  // Placeholder (can integrate ML model later)
-  res.json([
-    { day: "Mon", orders: 10 },
-    { day: "Tue", orders: 14 },
-    { day: "Wed", orders: 18 },
-    { day: "Thu", orders: 22 },
-    { day: "Fri", orders: 28 },
-    { day: "Sat", orders: 35 },
-    { day: "Sun", orders: 30 },
-  ]);
+exports.getForecast = async (req, res) => {
+  try {
+    const restaurant = await Restaurant.findOne({
+      where: { seller_id: req.user.id },
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    // Get last 5 days orders (example logic)
+    const recentOrders = await Order.findAll({
+      where: { restaurant_id: restaurant.id },
+      order: [["created_at", "DESC"]],
+      limit: 5,
+    });
+
+    if (recentOrders.length === 0) {
+      return res.status(400).json({
+        message: "Not enough order data for forecasting",
+      });
+    }
+
+    // Extract sales amounts
+    const sales = recentOrders
+        .map((o) => o.total_amount)
+        .reverse(); // oldest → newest
+
+    const days = sales.map((_, index) => index + 1);
+
+    // 🔹 Call ML forecast API
+    const response = await axios.post(
+        "http://127.0.0.1:8000/forecast",
+        { days, sales },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            accept: "application/json",
+          },
+        }
+    );
+
+    res.json({
+      forecast: response.data?.next_7_days_forecast || [],
+    });
+
+  } catch (err) {
+    console.error("Forecast Error:", err.message);
+
+    res.status(500).json({
+      message: "Failed to fetch forecast from ML service",
+    });
+  }
 };

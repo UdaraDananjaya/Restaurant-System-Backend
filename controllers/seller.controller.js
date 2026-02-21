@@ -6,8 +6,11 @@ const { Restaurant, MenuItem, Order, User } = require("../models");
 
 exports.getRestaurant = async (req, res) => {
   try {
+    // 🔐 Get user ID from JWT token (req.user is set by auth middleware)
+    const userId = req.user.id;
+
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     res.json(restaurant || null);
@@ -25,11 +28,13 @@ exports.getRestaurant = async (req, res) => {
 exports.updateRestaurantProfile = async (req, res) => {
   try {
     const { name, address, contact, cuisines, opening_hours } = req.body;
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
 
     const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
 
     let restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     // cuisines might come as JSON string or comma separated
@@ -50,7 +55,7 @@ exports.updateRestaurantProfile = async (req, res) => {
     if (!restaurant) {
       // Create new restaurant if not exists
       restaurant = await Restaurant.create({
-        seller_id: req.user.id,
+        seller_id: userId,
         ...updateData,
         is_active: true,
       });
@@ -73,8 +78,11 @@ exports.updateRestaurantProfile = async (req, res) => {
 
 exports.getMenu = async (req, res) => {
   try {
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
+
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) return res.json([]);
@@ -94,9 +102,11 @@ exports.getMenu = async (req, res) => {
 exports.addMenuItem = async (req, res) => {
   try {
     const { name, price, stock } = req.body;
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
 
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) {
@@ -193,8 +203,11 @@ exports.deleteMenuItem = async (req, res) => {
 
 exports.getOrders = async (req, res) => {
   try {
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
+
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) return res.json([]);
@@ -221,9 +234,11 @@ exports.getOrders = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
 
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) {
@@ -257,8 +272,11 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getAnalytics = async (req, res) => {
   try {
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
+
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) return res.json([]);
@@ -278,11 +296,14 @@ exports.getAnalytics = async (req, res) => {
 /* ================================================= */
 /* ================= FORECAST ====================== */
 /* ================================================= */
-
+const axios = require("axios");
 exports.getForecast = async (req, res) => {
   try {
+    // 🔐 Get user ID from JWT token
+    const userId = req.user.id;
+
     const restaurant = await Restaurant.findOne({
-      where: { seller_id: req.user.id },
+      where: { seller_id: userId },
     });
 
     if (!restaurant) {

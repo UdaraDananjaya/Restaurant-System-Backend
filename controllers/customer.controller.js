@@ -251,7 +251,7 @@ exports.getRecommendations = async (req, res) => {
     // 🔹 Call ML API with enriched order data
     const response = await axios.post(
       "http://127.0.0.1:8000/recommend_ml",
-      { orders: enrichedOrders },
+      { orders },
       {
         headers: {
           "Content-Type": "application/json",
@@ -273,14 +273,11 @@ exports.getRecommendations = async (req, res) => {
     res.status(200).json({
       recommended: recommendations.slice(0, limit),
     });
-
   } catch (err) {
-    console.error("❌ ML Recommendation Error:", err.message);
-    console.error("❌ Full error:", err);
+    console.error("ML Recommendation Error:", err.message);
 
     res.status(500).json({
       message: "Failed to fetch recommendations from ML service",
-      error: err.message,
     });
   }
 };

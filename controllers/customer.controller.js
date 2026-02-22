@@ -181,111 +181,92 @@ const axios = require("axios");
 exports.getRecommendations = async (req, res) => {
   try {
     const userId = req.user.id;
+    const limit = 5;
 
-    console.log("🔍 Fetching orders for user ID:", userId);
-
-    const limit = 5; // Default limit
-
-    // 📦 Fetch all customer's orders automatically
     const customerOrders = await Order.findAll({
       where: { user_id: userId },
       attributes: ["items"],
     });
 
-    console.log("📦 Total orders found:", customerOrders.length);
-
-    if (customerOrders.length === 0) {
+    if (!customerOrders.length) {
       return res.status(400).json({
         message: "No order history found for recommendations",
       });
     }
 
-    // Log first order to see structure
-    console.log(
-      "📋 First order structure:",
-      JSON.stringify(customerOrders[0], null, 2),
-    );
-
-    // 📝 Extract unique item names from all orders
+    // 🔹 Extract unique item names
     const itemNamesSet = new Set();
 
-    customerOrders.forEach((order, index) => {
-      // Parse items if it's a JSON string
+    for (const order of customerOrders) {
       let orderItems = order.items;
 
       if (typeof orderItems === "string") {
         try {
           orderItems = JSON.parse(orderItems);
-        } catch (e) {
-          console.error(
-            `  ❌ Failed to parse items for order ${index + 1}:`,
-            e.message,
-          );
-          return;
+        } catch {
+          continue;
         }
       }
 
-      console.log(`🔸 Order ${index + 1} items:`, orderItems);
-
       if (Array.isArray(orderItems)) {
-        orderItems.forEach((item) => {
-          console.log("  📌 Item:", item);
-          if (item.name) {
+        for (const item of orderItems) {
+          if (item?.name) {
             itemNamesSet.add(item.name);
-            console.log("  ✅ Added:", item.name);
-          } else {
-            console.log("  ⚠️ Item has no name property");
           }
-        });
-      } else {
-        console.log("  ❌ Items is not an array after parsing");
+        }
       }
-    });
+    }
 
-    // Convert Set to Array for unique item names
     const enrichedOrders = Array.from(itemNamesSet);
 
-    console.log(
-      "\n📊 Final enriched orders (unique item names):",
-      enrichedOrders,
-    );
-    console.log("📊 Total unique items:", enrichedOrders.length);
-
-    if (enrichedOrders.length === 0) {
+    if (!enrichedOrders.length) {
       return res.status(400).json({
         message: "No items found in order history",
       });
     }
 
-    // 🔹 Call ML API with enriched order data
-    const response = await axios.post(
-      "http://127.0.0.1:8000/recommend_ml",
-      { orders },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          accept: "application/json",
+    let recommendations = [];
+
+    // 🔹 Try ML Service
+    try {
+      const response = await axios.post(
+        "http://127.0.0.1:8000/recommend_ml",
+        { orders: enrichedOrders.map((name) => ({ name })) },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 3000, // ⏱ prevent hanging
         },
-      },
-    );
+      );
 
-    console.log("🤖 ML Response:", response.data);
+      const mlResult = response.data?.recommended_food;
 
-    // Adjust based on your ML response structure
-    const recommendations = response.data?.recommended_food
-      ? Array.isArray(response.data.recommended_food)
-        ? response.data.recommended_food
-        : [response.data.recommended_food]
-      : [];
+      if (Array.isArray(mlResult)) {
+        recommendations = mlResult;
+      } else if (mlResult) {
+        recommendations = [mlResult];
+      }
+    } catch (mlError) {
+      console.error("ML failed, using fallback:", mlError.message);
 
-    res.status(200).json({
+      // 🔹 Fallback: Most ordered items
+      const popularItems = await MenuItem.findAll({
+        order: [["orders_count", "DESC"]],
+        limit,
+      });
+
+      recommendations = popularItems.map((item) => item.name);
+    }
+
+    return res.status(200).json({
       recommended: recommendations.slice(0, limit),
     });
   } catch (err) {
-    console.error("ML Recommendation Error:", err.message);
+    console.error("Recommendation Error:", err.message);
 
-    res.status(500).json({
-      message: "Failed to fetch recommendations from ML service",
+    return res.status(500).json({
+      message: "Failed to fetch recommendations",
     });
   }
 };

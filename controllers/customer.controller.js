@@ -189,7 +189,7 @@ exports.getRecommendations = async (req, res) => {
     // 📦 Fetch all customer's orders automatically
     const customerOrders = await Order.findAll({
       where: { user_id: userId },
-      attributes: [ "items"],
+      attributes: ["items"],
     });
 
     console.log("📦 Total orders found:", customerOrders.length);
@@ -201,7 +201,10 @@ exports.getRecommendations = async (req, res) => {
     }
 
     // Log first order to see structure
-    console.log("📋 First order structure:", JSON.stringify(customerOrders[0], null, 2));
+    console.log(
+      "📋 First order structure:",
+      JSON.stringify(customerOrders[0], null, 2),
+    );
 
     // 📝 Extract unique item names from all orders
     const itemNamesSet = new Set();
@@ -210,11 +213,14 @@ exports.getRecommendations = async (req, res) => {
       // Parse items if it's a JSON string
       let orderItems = order.items;
 
-      if (typeof orderItems === 'string') {
+      if (typeof orderItems === "string") {
         try {
           orderItems = JSON.parse(orderItems);
         } catch (e) {
-          console.error(`  ❌ Failed to parse items for order ${index + 1}:`, e.message);
+          console.error(
+            `  ❌ Failed to parse items for order ${index + 1}:`,
+            e.message,
+          );
           return;
         }
       }
@@ -239,7 +245,10 @@ exports.getRecommendations = async (req, res) => {
     // Convert Set to Array for unique item names
     const enrichedOrders = Array.from(itemNamesSet);
 
-    console.log("\n📊 Final enriched orders (unique item names):", enrichedOrders);
+    console.log(
+      "\n📊 Final enriched orders (unique item names):",
+      enrichedOrders,
+    );
     console.log("📊 Total unique items:", enrichedOrders.length);
 
     if (enrichedOrders.length === 0) {
@@ -263,12 +272,11 @@ exports.getRecommendations = async (req, res) => {
     console.log("🤖 ML Response:", response.data);
 
     // Adjust based on your ML response structure
-    const recommendations =
-        response.data?.recommended_food
-            ? Array.isArray(response.data.recommended_food)
-              ? response.data.recommended_food
-              : [response.data.recommended_food]
-            : [];
+    const recommendations = response.data?.recommended_food
+      ? Array.isArray(response.data.recommended_food)
+        ? response.data.recommended_food
+        : [response.data.recommended_food]
+      : [];
 
     res.status(200).json({
       recommended: recommendations.slice(0, limit),

@@ -338,3 +338,33 @@ exports.getForecast = async (req, res) => {
     const days = Array.from({ length: salesData.length }, (_, i) => i + 1);
 
     console.log("📊 Daily Sales Data:", { days, sales: salesData });
+    // ✅ Call FastAPI forecasting service
+    // Set this in .env as FASTAPI_URL=http://127.0.0.1:8000
+    const FASTAPI_URL = (
+      process.env.FASTAPI_URL || "http://127.0.0.1:8000"
+    ).replace(/\/$/, "");
+
+    // You can change endpoint name if yours is different:
+    // e.g. /forecast or /predict
+    const response = await axios.post(`${FASTAPI_URL}/forecast`, {
+      days,
+      sales: salesData,
+      dates: sortedDates, // optional but useful
+    });
+
+    // Expecting something like:
+    // { forecast: [..], next_days: [..] } OR any json
+    return res.json({
+      message: "✅ Forecast generated",
+      input: { dates: sortedDates, days, sales: salesData },
+      result: response.data,
+    });
+  } catch (err) {
+    console.error("Forecast Error:", err?.response?.data || err.message || err);
+
+    return res.status(500).json({
+      message: "Failed to generate forecast",
+      error: err?.response?.data || err.message || "Unknown error",
+    });
+  }
+};
